@@ -1,14 +1,25 @@
 const express = require('express')
 const bodyParser = require('body-parser')
 const axios = require('axios');
+const fs = require('fs');
 
 const app = express()
-app.listen(8084, () => console.log('Example app listening on port 8084!'))
+// app.listen(8084, () => console.log('Example app listening on port 8084!'))
 
 
 app.use(function (err, req, res, next) {
   res.status(500).send('Something broke!')
 })
+var key = fs.readFileSync('key.pem');
+var cert = fs.readFileSync( 'cert.pem' );
+var options = {
+key: key,
+cert: cert
+};
+
+var https = require('https');
+https.createServer(options, app).listen(443);
+
 
 app.use(bodyParser.json());
 // app.use(bodyParser.urlencoded({extended:true}))
@@ -37,4 +48,8 @@ app.post('/test',(req,res)=>{
 
 app.get('/test',(req,res)=>{
 	res.send('test');
+})
+
+app.get('/',(req,res)=>{
+	res.send('working');
 })
