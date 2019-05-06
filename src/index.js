@@ -1,7 +1,7 @@
 const express = require('express')
 const bodyParser = require('body-parser')
 const axios = require('axios');
-// const fs = require('fs');
+const fs = require('fs');
 
 const app = express()
 app.listen(8084, () => console.log('Example app listening on port 8084!'))
@@ -10,46 +10,81 @@ app.listen(8084, () => console.log('Example app listening on port 8084!'))
 app.use(function (err, req, res, next) {
   res.status(500).send('Something broke!')
 })
-// var key = fs.readFileSync('key.pem');
-// var cert = fs.readFileSync( 'cert.pem' );
-// var options = {
-// key: key,
-// cert: cert
-// };
-
-// var https = require('https');
-// https.createServer(options, app).listen(443);
 
 
 app.use(bodyParser.json());
-// app.use(bodyParser.urlencoded({extended:true}))
+
+function getResults(promises,hosts,urlKeys){
+	let resultArr = [];
+	return new Promise((resolve,reject)=>{
+		Promise.all(promises)
+		.then(results=>{
+			let resp = results.map(n=>n.data);
+			let localHosts = [], localUrlKeys = [];
+			promises.length = [];
+			resp.forEach((n,i)=>{
+				if(n.state != 'FINISHED'){
+					localHosts.push(hosts[i]);
+					localUrlKeys.push(urlKeys[i]);
+					promises.push(axios.post(`https://http-observatory.security.mozilla.org/api/v1/analyze?host=${hosts[i]}`,{hidden:false,rescan:false}))
+					return
+				}
+				const obj = {};
+				const key = urlKeys[i].toLowerCase();
+				obj.score = n.score;
+				obj.url = hosts[i];
+				if(n.score<20){
+					obj[key] = {state:'unsafe'};
+				}
+				else{
+					obj[key] = {state:'safe'}
+				}
+				resultArr.push(obj);
+			})
+			if(promises.length == 0){
+				resolve(resultArr);
+				return;
+			}
+			setTimeout(()=>{
+				getResults(promises,localHosts,localUrlKeys)
+				.then((reslt)=>{
+					resultArr = resultArr.concat(reslt);
+					resolve(resultArr);
+				})
+				.catch((err)=>{
+					reject(err);
+				})
+			},2000)
 
 
+		})
+		.catch((err)=>{
+			reject(err);
+		})
+	})
+
+}
 
 app.post('/test',(req,res)=>{
-	// const imgUrl = req.body && req.body.message && (req.body.message.type === 'image') && req.body.message.body && req.body.message.body.url;
 	const body = req.body;
 	const promises = [];
+	const hosts = [];
+	const urlKeys = [];
 	for(url in body){
 		if(String(body[url]).match(/^((https).+)|((http).+)/)){
 			const host = (new URL(body[url])).host
-			promises.push(axios.get(`https://http-observatory.security.mozilla.org/api/v1/analyze?host=${host}&hidden=false`))
+			hosts.push(host);
+			urlKeys.push(url);
+			promises.push(axios.post(`https://http-observatory.security.mozilla.org/api/v1/analyze?host=${host}`,{hidden:false,rescan:false}))
 		}
 	}
-	Promise.all(promises)
+	getResults(promises,hosts,urlKeys)
 	.then(results=>{
-		let resp = results.map(n=>n.data);
-		console.log(resp)
-		res.send({test:JSON.stringify(resp)});
+		res.json([results]);
 	})
-	
+	.catch((err)=>{
+		console.log(err);
+		res.status(500).send(err);
+	})
 
-})
-
-app.get('/test',(req,res)=>{
-	res.send('test');
-})
-
-app.get('/',(req,res)=>{
-	res.send('working');
 })
