@@ -34,7 +34,7 @@ function getResults(promises,hosts,urlKeys){
 				obj.score = n.score;
 				obj.url = hosts[i];
 				if(n.score<20){
-					obj[key] = {state:'unsafe'};
+					obj[key] = {state:'unsafe', reason:'Security scan result is poor'};
 				}
 				else{
 					obj[key] = {state:'safe'}
